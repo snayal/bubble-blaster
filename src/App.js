@@ -29,6 +29,15 @@ const LEVELS = [
   {name:"Level 10",theme:9, target:40000,time:25, rows:10,speed:19},
 ];
 
+const POWER_UP_TYPES = {
+  bomb:    {color:"#ff0055", emoji:"💣", label:"Bomb",    desc:"Explodes neighbors"},
+  rainbow: {color:"#ffffff", emoji:"🌈", label:"Rainbow", desc:"Clears most color"},
+  laser:   {color:"#ff00ff", emoji:"⚡", label:"Laser",   desc:"Clears entire row"},
+  freeze:  {color:"#00ffff", emoji:"❄️", label:"Freeze",  desc:"+10s time bonus!"},
+  fireball:{color:"#ff6600", emoji:"🔥", label:"Fire",    desc:"Clears 3 rows!"},
+  star:    {color:"#ffdd00", emoji:"⭐", label:"Star",    desc:"2x score for 10s!"},
+};
+
 const TIPS = [
   "💡 Aim for the sides to bounce bubbles into tight spots!",
   "💡 Pop floating bubbles for bonus points!",
@@ -39,6 +48,16 @@ const TIPS = [
   "💡 Watch the timer — speed up on low time!",
   "💡 Clear the board fast for a time bonus!",
 ];
+
+const today = new Date().toDateString();
+const DAILY_CHALLENGES = [
+  {id:1, name:"Speed Demon",    desc:"Reach 1000 pts in 30 seconds!", target:1000, time:30, reward:"🏅 Bronze Badge"},
+  {id:2, name:"Combo Master",   desc:"Get a 5x combo!",                target:5,    mode:"combo", reward:"🥈 Silver Badge"},
+  {id:3, name:"Bubble Popper",  desc:"Pop 50 bubbles in one game!",    target:50,   mode:"bubbles", reward:"🥇 Gold Badge"},
+  {id:4, name:"Power Player",   desc:"Use 5 power-ups in one game!",   target:5,    mode:"powerups", reward:"💎 Diamond Badge"},
+  {id:5, name:"Level Chaser",   desc:"Reach Level 5!",                 target:5,    mode:"level", reward:"👑 Crown Badge"},
+];
+const todayChallenge = DAILY_CHALLENGES[new Date().getDay() % DAILY_CHALLENGES.length];
 
 const LB_INIT = [
   {name:"CosmicAce",  score:38500},
@@ -72,9 +91,12 @@ function initGrid(lvl){
 
 function rndBubble(lvl){
   const t=THEMES[LEVELS[lvl].theme], rnd=Math.random();
-  if(rnd<0.04) return {color:"#ff0055",type:"bomb"};
-  if(rnd<0.07) return {color:"#ffffff",type:"rainbow"};
-  if(rnd<0.09) return {color:"#ff00ff",type:"laser"};
+  if(rnd<0.03) return {color:"#ff0055",type:"bomb"};
+  if(rnd<0.06) return {color:"#ffffff",type:"rainbow"};
+  if(rnd<0.08) return {color:"#ff00ff",type:"laser"};
+  if(rnd<0.10) return {color:"#00ffff",type:"freeze"};
+  if(rnd<0.11) return {color:"#ff6600",type:"fireball"};
+  if(rnd<0.12) return {color:"#ffdd00",type:"star"};
   return {color:t.bubbles[Math.floor(Math.random()*t.bubbles.length)],type:"normal"};
 }
 
@@ -239,6 +261,24 @@ export default function BubbleBlaster() {
       } else if(proj.type==="laser"){
         sound("combo"); if(G.current.grid[br])G.current.grid[br].forEach((cell,c)=>{if(cell){const pos=hexPos(br,c);spawnParticles(pos.x,pos.y,cell.color,10);G.current.score+=18;G.current.bubblesPopped++;}});
         G.current.grid[br]=G.current.grid[br]?.map(()=>null)||[];dropFloating();setScore(G.current.score);showMsg("⚡ Laser Row!");
+      } else if(proj.type==="freeze"){
+        sound("combo");
+        setTimeLeft(t=>Math.min(t+10, LEVELS[G.current.lvl].time+10));
+        G.current.grid[br][bc]=null; spawnParticles(W/2,H/2,"#00ffff",20);
+        setScore(G.current.score); showMsg("❄️ +10 Seconds!");
+      } else if(proj.type==="fireball"){
+        sound("bomb"); G.current.shakeX=8; G.current.shakeY=6;
+        [br-1,br,br+1].forEach(row=>{
+          if(G.current.grid[row]) G.current.grid[row].forEach((cell,c)=>{
+            if(cell){const pos=hexPos(row,c);spawnParticles(pos.x,pos.y,cell.color,8);G.current.grid[row][c]=null;G.current.score+=15;G.current.bubblesPopped++;}
+          });
+        });
+        dropFloating(); setScore(G.current.score); showMsg("🔥 3 Rows Cleared!");
+      } else if(proj.type==="star"){
+        sound("combo"); G.current.starActive=true; G.current.starTimer=10;
+        G.current.grid[br][bc]=null; spawnParticles(W/2,H/2,"#ffdd00",20);
+        setScore(G.current.score); showMsg("⭐ 2x Score for 10s!");
+        setTimeout(()=>{G.current.starActive=false;},10000);
       } else {
         const popped=findMatches(br,bc,proj.color);
         if(popped.length>=3){
@@ -293,8 +333,30 @@ export default function BubbleBlaster() {
 
       // Aim line
       const sx=W/2,sy=H-70;
-      ctx.save();ctx.setLineDash([7,11]);ctx.strokeStyle=theme.accent+"66";ctx.lineWidth=2;ctx.shadowColor=theme.accent;ctx.shadowBlur=8;
-      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+Math.cos(g.angle)*200,sy+Math.sin(g.angle)*200);ctx.stroke();ctx.setLineDash([]);ctx.shadowBlur=0;ctx.restore();
+      ctx.save();
+      // Main bright aim line
+      ctx.shadowColor="#ffffff";ctx.shadowBlur=15;
+      ctx.strokeStyle="rgba(255,255,255,0.95)";ctx.lineWidth=3;
+      ctx.setLineDash([12,8]);
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+Math.cos(g.angle)*220,sy+Math.sin(g.angle)*220);ctx.stroke();
+      // Colored glow underneath
+      ctx.shadowColor=theme.accent;ctx.shadowBlur=20;
+      ctx.strokeStyle=theme.accent;ctx.lineWidth=5;ctx.globalAlpha=0.5;
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+Math.cos(g.angle)*220,sy+Math.sin(g.angle)*220);ctx.stroke();
+      // Dot at end of line
+      ctx.globalAlpha=1;ctx.shadowBlur=20;
+      ctx.beginPath();ctx.arc(sx+Math.cos(g.angle)*220,sy+Math.sin(g.angle)*220,6,0,Math.PI*2);
+      ctx.fillStyle="#fff";ctx.fill();
+      // Reflection line
+      const rx=sx+Math.cos(g.angle)*220,ry=sy+Math.sin(g.angle)*220;
+      if(rx<BR+10||rx>W-BR-10){
+        const reflectAngle=Math.PI-g.angle;
+        ctx.shadowColor="rgba(255,255,255,0.6)";ctx.shadowBlur=10;
+        ctx.strokeStyle="rgba(255,255,255,0.6)";ctx.lineWidth=2;ctx.globalAlpha=0.7;
+        ctx.setLineDash([8,10]);
+        ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(rx+Math.cos(reflectAngle)*120,ry+Math.sin(reflectAngle)*120);ctx.stroke();
+      }
+      ctx.setLineDash([]);ctx.shadowBlur=0;ctx.globalAlpha=1;ctx.restore();
 
       // Projectile
       if(g.proj){
@@ -376,32 +438,32 @@ export default function BubbleBlaster() {
         .menu-btn:active{transform:scale(0.95)!important}
       `}</style>
 
-      {/* GAME CANVAS */}
-      <canvas ref={canvasRef} width={W} height={H} style={{...S.canvas, display:screen==="game"?"block":"none"}} />
-
-      {/* GAME HUD */}
+      {/* GAME CANVAS + HUD wrapper */}
       {screen==="game" && (
-        <div style={{...S.overlay, justifyContent:"flex-start", pointerEvents:"none"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"10px 14px",width:"100%"}}>
-            <div style={S.pill}><div style={{fontSize:11,color:"rgba(255,255,255,0.55)"}}>SCORE</div><div style={{fontSize:22,color:"#ffe44d",textShadow:"0 2px 8px #ff8800"}}>{score.toLocaleString()}</div></div>
-            <div style={{textAlign:"center"}}>
-              <div style={{...S.pill,fontSize:12,color:"#adf"}}>{lvlData.name}</div>
-              <div style={{marginTop:5,width:160,height:9,background:"rgba(0,0,0,0.35)",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.15)"}}>
+        <div style={{display:"flex",flexDirection:"column",width:"100%"}}>
+          {/* TOP HUD - sits ABOVE canvas */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"rgba(0,0,0,0.6)",borderRadius:"16px 16px 0 0",border:"1px solid rgba(255,255,255,0.1)",borderBottom:"none",width:"100%"}}>
+            <div style={S.pill}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)"}}>SCORE</div><div style={{fontSize:20,color:"#ffe44d",textShadow:"0 2px 8px #ff8800"}}>{score.toLocaleString()}</div></div>
+            <div style={{textAlign:"center",flex:1,margin:"0 10px"}}>
+              <div style={{fontSize:12,color:"#adf",fontFamily:"'Fredoka One',cursive"}}>{lvlData.name}</div>
+              <div style={{marginTop:4,height:8,background:"rgba(255,255,255,0.12)",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.15)"}}>
                 <div style={{width:`${progress}%`,height:"100%",background:"linear-gradient(90deg,#ff6ec7,#ffe44d,#44ffcc)",borderRadius:8,transition:"width 0.4s"}}/>
               </div>
               <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>{score.toLocaleString()} / {lvlData.target.toLocaleString()}</div>
             </div>
-            <div style={S.pill}><div style={{fontSize:11,color:"rgba(255,255,255,0.55)"}}>TIME</div><div style={{fontSize:22,color:timeLeft<=10?"#ff4444":"#fff",animation:timeLeft<=10?"pulse 0.5s infinite":""}}>{timeLeft}s</div></div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={S.pill}><div style={{fontSize:10,color:"rgba(255,255,255,0.55)"}}>TIME</div><div style={{fontSize:20,color:timeLeft<=10?"#ff4444":"#fff",animation:timeLeft<=10?"pulse 0.5s infinite":""}}>{timeLeft}s</div></div>
+              <button onClick={triggerEndGame} style={{...S.btn("rgba(255,255,255,0.08)","none"),fontSize:11,padding:"4px 10px",color:"#aaa",border:"1px solid rgba(255,255,255,0.12)"}}>Quit</button>
+            </div>
           </div>
-          {msg && <div style={{position:"absolute",left:"50%",top:65,fontSize:isCombo?34:22,color:isCombo?"#ffe44d":"#fff",textShadow:isCombo?"0 0 20px #ff8800":"0 0 12px #fff",whiteSpace:"nowrap",animation:"combopop 1.1s ease forwards",pointerEvents:"none"}}>{msg}</div>}
-          <div style={{position:"absolute",bottom:100,left:10,right:10,height:10,background:"rgba(0,0,0,0.3)",borderRadius:10,overflow:"hidden",border:"1px solid rgba(255,255,255,0.15)"}}>
-            <div style={{width:`${progress}%`,height:"100%",background:"linear-gradient(90deg,#ff6ec7,#ffe44d,#44ffcc)",borderRadius:10,transition:"width 0.5s"}}/>
-          </div>
-          <div style={{position:"absolute",bottom:6,right:8,pointerEvents:"all"}}>
-            <button onClick={triggerEndGame} style={{...S.btn("rgba(255,255,255,0.1)","none"),fontSize:12,padding:"5px 14px",color:"#aaa",border:"1px solid rgba(255,255,255,0.15)"}}>Quit</button>
+          {/* CANVAS */}
+          <div style={{position:"relative"}}>
+            <canvas ref={canvasRef} width={W} height={H} style={{...S.canvas,borderRadius:"0 0 16px 16px",display:"block"}} />
+            {msg && <div style={{position:"absolute",left:"50%",top:"10%",fontSize:isCombo?34:22,color:isCombo?"#ffe44d":"#fff",textShadow:isCombo?"0 0 20px #ff8800":"0 0 12px #fff",whiteSpace:"nowrap",animation:"combopop 1.1s ease forwards",pointerEvents:"none",transform:"translateX(-50%)"}}>{msg}</div>}
           </div>
         </div>
       )}
+      {screen!=="game" && <canvas ref={canvasRef} width={W} height={H} style={{...S.canvas,display:"none"}} />}
 
       {/* MENU SCREEN */}
       {screen==="menu" && (
@@ -421,6 +483,7 @@ export default function BubbleBlaster() {
               <div style={{display:"flex",gap:12}}>
                 <button className="menu-btn" onClick={()=>setScreen("leaderboard")} style={{...S.btn("linear-gradient(135deg,#ffe44d,#ffaa00)","#ffaa0055"),color:"#5a3000",fontSize:17,transition:"transform 0.1s"}}>🏆 Scores</button>
                 <button className="menu-btn" onClick={()=>setScreen("howtoplay")} style={{...S.btn("linear-gradient(135deg,#66aaff,#3355ff)","#3355ff55"),fontSize:17,transition:"transform 0.1s"}}>❓ How to Play</button>
+              <button className="menu-btn" onClick={()=>setScreen("daily")} style={{...S.btn("linear-gradient(135deg,#ff8844,#ff4400)","#ff440055"),fontSize:17,transition:"transform 0.1s"}}>🎯 Daily Challenge</button>
               </div>
             </div>
             <div style={{marginTop:12,fontSize:12,color:"rgba(255,255,255,0.3)",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>10 Levels · 3 Power-ups · Infinite Fun 🎮</div>
@@ -432,7 +495,7 @@ export default function BubbleBlaster() {
       {screen==="howtoplay" && (
         <div style={{borderRadius:20,background:"linear-gradient(160deg,#0a0020,#1a0040,#0a0828)",minHeight:520,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",gap:16}}>
           <div style={{fontSize:38,color:"#ffe44d",textShadow:"0 3px 0 #aa6600"}}>❓ How to Play</div>
-          {[["🖱️ Aim & Shoot","Move mouse to aim, click to fire!"],["🎯 Match Bubbles","Pop 3+ same color bubbles"],["🔥 Build Combos","Chain pops = score multiplier!"],["💣 Bomb","Explodes all nearby bubbles"],["🌈 Rainbow","Clears the most common color"],["⚡ Laser","Wipes an entire row instantly"],].map(([icon,desc])=>(
+          {[["🖱️ Aim & Shoot","Move mouse to aim, click to fire!"],["🎯 Match Bubbles","Pop 3+ same color bubbles"],["🔥 Build Combos","Chain pops = score multiplier!"],["💣 Bomb","Explodes all nearby bubbles"],["🌈 Rainbow","Clears most common color"],["⚡ Laser","Wipes entire row instantly"],["❄️ Freeze","Adds +10 seconds!"],["🔥 Fireball","Clears 3 rows at once!"],["⭐ Star","2x score for 10 seconds!"],].map(([icon,desc])=>(
             <div key={icon} style={{display:"flex",alignItems:"center",gap:14,background:"rgba(255,255,255,0.07)",borderRadius:16,padding:"12px 20px",width:"100%",maxWidth:360,border:"1px solid rgba(255,255,255,0.12)"}}>
               <div style={{fontSize:28}}>{icon}</div>
               <div style={{fontSize:16,color:"#fff",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>{desc}</div>
@@ -498,6 +561,38 @@ export default function BubbleBlaster() {
               <button className="go-btn" onClick={()=>setScreen("menu")} style={{...S.btn("linear-gradient(135deg,#66aaff,#3355ff)","#3355ff55"),transition:"transform 0.1s"}}>🏠 Menu</button>
             </div>
             <div style={{fontSize:13,color:"rgba(255,255,255,0.3)",fontFamily:"'Nunito',sans-serif",fontWeight:700,textAlign:"center",animation:"slidein 0.4s 0.8s both"}}>{tip}</div>
+          </div>
+        </div>
+      )}
+
+      {/* DAILY CHALLENGE */}
+      {screen==="daily" && (
+        <div style={{borderRadius:20,background:"linear-gradient(160deg,#1a0800,#3a1500,#1a0a00)",minHeight:520,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",gap:14}}>
+          <div style={{fontSize:48,animation:"float 2s ease-in-out infinite"}}>🎯</div>
+          <div style={{fontSize:36,color:"#ff8844",textShadow:"0 3px 0 #aa4400",marginBottom:4}}>Daily Challenge</div>
+          <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",fontFamily:"'Nunito',sans-serif",fontWeight:700,marginBottom:8}}>{today}</div>
+          <div style={{width:"100%",maxWidth:360,background:"rgba(255,136,68,0.12)",border:"2px solid rgba(255,136,68,0.4)",borderRadius:20,padding:"20px 24px",textAlign:"center"}}>
+            <div style={{fontSize:28,marginBottom:8}}>{todayChallenge.id===1?"⚡":todayChallenge.id===2?"🔥":todayChallenge.id===3?"🫧":todayChallenge.id===4?"💥":"🏆"}</div>
+            <div style={{fontSize:24,color:"#ff8844",fontFamily:"'Fredoka One',cursive",marginBottom:6}}>{todayChallenge.name}</div>
+            <div style={{fontSize:15,color:"rgba(255,255,255,0.8)",fontFamily:"'Nunito',sans-serif",fontWeight:700,marginBottom:16}}>{todayChallenge.desc}</div>
+            <div style={{fontSize:13,color:"#ffdd00",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>Reward: {todayChallenge.reward}</div>
+          </div>
+          <div style={{width:"100%",maxWidth:360}}>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",fontFamily:"'Nunito',sans-serif",fontWeight:700,marginBottom:10,textAlign:"center"}}>MORE CHALLENGES</div>
+            {DAILY_CHALLENGES.map((ch,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:"rgba(255,255,255,0.06)",borderRadius:12,marginBottom:8,border:`1px solid ${ch.id===todayChallenge.id?"rgba(255,136,68,0.5)":"rgba(255,255,255,0.1)"}`}}>
+                <div style={{fontSize:20}}>{["⚡","🔥","🫧","💥","🏆"][i]}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,color:ch.id===todayChallenge.id?"#ff8844":"#fff",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>{ch.name}</div>
+                  <div style={{fontSize:12,color:"rgba(255,255,255,0.4)",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>{ch.reward}</div>
+                </div>
+                <div style={{fontSize:11,color:ch.id===todayChallenge.id?"#ff8844":"rgba(255,255,255,0.3)",fontFamily:"'Nunito',sans-serif",fontWeight:700}}>{ch.id===todayChallenge.id?"TODAY":"SOON"}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:12}}>
+            <button className="menu-btn" onClick={()=>startGame(0)} style={{...S.btn("linear-gradient(135deg,#ff8844,#ff4400)","#ff440055"),transition:"transform 0.1s"}}>🚀 Accept!</button>
+            <button className="menu-btn" onClick={()=>setScreen("menu")} style={{...S.btn("linear-gradient(135deg,#66aaff,#3355ff)","#3355ff55"),transition:"transform 0.1s"}}>🏠 Menu</button>
           </div>
         </div>
       )}
