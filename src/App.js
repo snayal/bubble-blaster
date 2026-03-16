@@ -344,7 +344,7 @@ export default function BubbleBlaster() {
     canvas.addEventListener("touchmove",e=>{e.preventDefault();onMove(e.touches[0]);},{passive:false});
     canvas.addEventListener("touchend",e=>{e.preventDefault();onClick(e.changedTouches[0]);},{passive:false});
     return()=>{canvas.removeEventListener("mousemove",onMove);canvas.removeEventListener("click",onClick);};
-  },[screen]);
+  },[screen,sound]);
 
   const lvlData=LEVELS[level]||LEVELS[0];
   const progress=Math.min(100,(score/lvlData.target)*100);
